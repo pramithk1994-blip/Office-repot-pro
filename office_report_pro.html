@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Office Report Pro</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{--navy:#17345c;--blue:#2463eb;--bg:#f3f6fb;--ink:#182230;--muted:#64748b;--line:#dbe3ef}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,"Noto Sans Sinhala",sans-serif;color:var(--ink)}
+header{background:linear-gradient(120deg,#17345c,#2459a8);color:white;padding:22px 16px}
+.wrap{max-width:1100px;margin:auto}h1{font-size:24px;margin:0 0 7px}header p{margin:0;color:#dbeafe;font-size:14px}
+main{padding:16px;max-width:1100px;margin:auto}.notice{font-size:13px;color:#475569;background:#fff7ed;border:1px solid #fed7aa;padding:12px;border-radius:12px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.card{background:white;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 2px 8px #17255408}.metric{font-size:25px;font-weight:700;color:var(--navy);margin-top:7px;overflow-wrap:anywhere}.muted{color:var(--muted);font-size:13px}
+section{margin:14px 0}.section-title{font-size:17px;font-weight:700;margin:0 0 12px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:10px;padding:12px 15px;background:var(--blue);color:#fff;font-weight:700;font-size:14px;cursor:pointer;text-decoration:none}.btn.secondary{background:#e8eef9;color:#17345c}.btn:disabled{opacity:.45;cursor:not-allowed}input[type=file],input[type=search]{max-width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.chartbox{height:280px;position:relative}.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;max-height:440px}table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}th,td{padding:10px 12px;border-bottom:1px solid #e8edf5;text-align:left}th{background:#eef3fb;position:sticky;top:0;z-index:1}tr:last-child td{border-bottom:0}.empty{padding:30px;text-align:center;color:var(--muted)}.foot{font-size:12px;color:var(--muted);text-align:center;padding:18px}
+@media(max-width:650px){.grid{grid-template-columns:1fr}.metric{font-size:22px}header{padding:20px 16px}.chartbox{height:240px}.btn{flex:1}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>📊 Office Report Pro</h1><p>Excel Upload • Dashboard • Excel Download</p></div></header>
+<main>
+<div class="notice"><b>පරීක්ෂණ අනුවාදය:</b> මෙම පිටුව Excel ගොනුව ඔබගේ browser එක තුළ කියවයි. දත්ත ස්ථිරව Online ගබඩා නොවේ. රහස්‍ය/පාරිභෝගික දත්ත භාවිත නොකර උදාහරණ ගොනුවකින් පරීක්ෂා කරන්න.</div>
+<section class="card">
+<div class="section-title">1. Excel ගොනුව Upload කරන්න</div>
+<div class="actions"><input id="fileInput" type="file" accept=".xlsx,.xls,.csv"><button id="sampleBtn" class="btn secondary">උදාහරණ දත්ත බලන්න</button><button id="exportBtn" class="btn" disabled>Excel Download</button></div>
+<p id="status" class="muted">.xlsx, .xls හෝ .csv ගොනුවක් තෝරන්න. පළමු worksheet එක කියවනු ලැබේ.</p>
+</section>
+<section class="grid">
+<div class="card"><div class="muted">දත්ත පේළි ගණන</div><div id="rowCount" class="metric">0</div></div>
+<div class="card"><div class="muted">තීරු ගණන</div><div id="colCount" class="metric">0</div></div>
+<div class="card"><div class="muted">සම්පූර්ණ සංඛ්‍යාත්මක එකතුව</div><div id="totalValue" class="metric">—</div><div id="totalLabel" class="muted">පළමු සංඛ්‍යාත්මක තීරුව</div></div>
+</section>
+<section class="card">
+<div class="section-title">2. Dashboard Chart</div>
+<p class="muted">පළමු තීරුවේ නාම සහ පළමු සංඛ්‍යාත්මක තීරුවේ අගයන් ප්‍රස්තාරයට යොදාගනී.</p>
+<div class="chartbox"><canvas id="chart"></canvas></div>
+</section>
+<section class="card">
+<div class="section-title">3. Excel දත්ත</div>
+<div class="actions" style="margin-bottom:12px"><input id="search" type="search" placeholder="දත්ත සොයන්න..." aria-label="දත්ත සොයන්න"><span id="tableInfo" class="muted">දත්ත තවම ඇතුළත් කර නැත</span></div>
+<div id="tableArea" class="tablewrap"><div class="empty">Excel ගොනුවක් Upload කරන්න හෝ උදාහරණ දත්ත බලන්න.</div></div>
+</section>
+<div class="foot">Office Report Pro • Starter version</div>
+</main>
+<script>
+let rows=[], headers=[], chart=null, sourceName="office-report";
+const $=id=>document.getElementById(id);
+function setStatus(t){$("status").textContent=t}
+function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function setData(data,name){
+ if(!data||!data.length){rows=[];headers=[];render();setStatus("ගොනුවේ දත්ත හමු නොවීය.");return}
+ headers=(data[0]||[]).map((h,i)=>String(h??`Column ${i+1}`));
+ rows=data.slice(1).filter(r=>r.some(v=>v!==null&&v!==undefined&&String(v).trim()!=="")).map(r=>{const o={};headers.forEach((h,i)=>o[h]=r[i]??"");return o});
+ sourceName=(name||"office-report").replace(/\.[^.]+$/,"").replace(/[^\w-]+/g,"-");
+ render();setStatus(`සාර්ථකයි: ${name||"දත්ත"} — ${rows.length} පේළි කියවා ඇත.`);
+}
+function render(){
+ $("rowCount").textContent=rows.length.toLocaleString();
+ $("colCount").textContent=headers.length.toLocaleString();
+ $("exportBtn").disabled=!rows.length;
+ const numKey=headers.find(h=>rows.some(r=>r[h]!==""&&r[h]!==null&&r[h]!==undefined&&Number.isFinite(Number(String(r[h]).replace(/,/g,"")))));
+ const total=numKey?rows.reduce((s,r)=>s+(Number(String(r[numKey]??"").replace(/,/g,""))||0),0):null;
+ $("totalValue").textContent=total===null?"—":total.toLocaleString(undefined,{maximumFractionDigits:2});
+ $("totalLabel").textContent=numKey?`එකතුව: ${numKey}`:"සංඛ්‍යාත්මක තීරුවක් හමු නොවීය";
+ if(chart)chart.destroy();
+ if(numKey&&headers.length){
+  const labelKey=headers[0], limited=rows.slice(0,30);
+  chart=new Chart($("chart"),{type:"bar",data:{labels:limited.map((r,i)=>String(r[labelKey]||`Row ${i+1}`).slice(0,24)),datasets:[{label:numKey,data:limited.map(r=>Number(String(r[numKey]??"").replace(/,/g,""))||0),borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{y:{beginAtZero:true}}}});
+ } else {$("chart").parentElement.innerHTML='<div class="empty">ප්‍රස්තාරයක් සෑදීමට සංඛ්‍යාත්මක තීරුවක් අවශ්‍යයි.</div>'}
+ renderTable();
+}
+function renderTable(){
+ const q=$("search").value.toLowerCase().trim();
+ const filtered=rows.filter(r=>!q||headers.some(h=>String(r[h]??"").toLowerCase().includes(q)));
+ $("tableInfo").textContent=`පෙන්වන්නේ ${filtered.length} / ${rows.length} පේළි`;
+ if(!headers.length){$("tableArea").innerHTML='<div class="empty">දත්ත නැත.</div>';return}
+ const head="<thead><tr>"+headers.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr></thead>";
+ const body=filtered.slice(0,500).map(r=>"<tr>"+headers.map(h=>`<td>${escapeHtml(r[h])}</td>`).join("")+"</tr>").join("");
+ $("tableArea").innerHTML=`<table>${head}<tbody>${body}</tbody></table>`+(filtered.length>500?'<div class="muted" style="padding:10px">පළමු පේළි 500 පමණක් පෙන්වයි. Download එකේ සියලු දත්ත ඇතුළත් වේ.</div>':"");
+}
+$("fileInput").addEventListener("change",async e=>{
+ const file=e.target.files[0];if(!file)return;
+ try{const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:"array"});const ws=wb.Sheets[wb.SheetNames[0]];setData(XLSX.utils.sheet_to_json(ws,{header:1,defval:""}),file.name)}
+ catch(err){setStatus("ගොනුව කියවීමට නොහැකි විය. නිවැරදි Excel/CSV ගොනුවක් තෝරන්න.")}
+});
+$("sampleBtn").addEventListener("click",()=>setData([
+["ශාඛාව","වාර්තා ගණන","මුදල"],["Colombo",12,150000],["Kandy",8,95000],["Galle",15,180000],["Matara",6,72000],["Kurunegala",10,125000]
+],"sample-data.xlsx"));
+$("exportBtn").addEventListener("click",()=>{
+ if(!rows.length)return;
+ const ws=XLSX.utils.json_to_sheet(rows,{header:headers});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Report");XLSX.writeFile(wb,`${sourceName}-report.xlsx`);
+});
+$("search").addEventListener("input",renderTable);
+</script>
+</body>
+</html>
